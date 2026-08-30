@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { type ChatEvent, type HostStatus } from "../shared/protocol";
-import { foldThread, type ThreadItem } from "../shared/thread";
+import { foldThread, type ThreadBlock, type ThreadItem } from "../shared/thread";
+import { LoadingState } from "./blocks/LoadingState";
+import { StreamingText } from "./blocks/StreamingText";
 import { Text } from "./blocks/Text";
 import { Thinking } from "./blocks/Thinking";
 import { ToolChip } from "./blocks/ToolChip";
@@ -9,7 +11,22 @@ import { Search } from "./chrome/Search";
 import { Sidebar } from "./chrome/Sidebar";
 import { filterThread } from "./chrome/filter-thread";
 
-function ThreadRow({ item }: { item: ThreadItem }) {
+function waitingForAssistant(items: readonly ThreadItem[]): boolean {
+  const last = items.at(-1);
+  if (!last || last.kind === "user" || last.kind === "status" || last.kind === "error") {
+    return true;
+  }
+  return last.kind === "assistant" && last.blocks.length === 0;
+}
+
+function lastTextIndex(blocks: readonly ThreadBlock[]): number {
+  for (let index = blocks.length - 1; index >= 0; index--) {
+    if (blocks[index]?.type === "text") return index;
+  }
+  return -1;
+}
+
+function ThreadRow({ item, live }: { item: ThreadItem; live: boolean }) {
   switch (item.kind) {
     case "user":
       return (
@@ -29,13 +46,18 @@ function ThreadRow({ item }: { item: ThreadItem }) {
           {item.text}
         </p>
       );
-    case "assistant":
+    case "assistant": {
+      const liveText = live ? lastTextIndex(item.blocks) : -1;
       return (
         <div>
           {item.blocks.map((block, index) => {
             switch (block.type) {
               case "text":
-                return <Text key={`text-${index}`} text={block.text} />;
+                return index === liveText ? (
+                  <StreamingText key={`text-${index}`} text={block.text} />
+                ) : (
+                  <Text key={`text-${index}`} text={block.text} />
+                );
               case "thinking":
                 return <Thinking key={`think-${index}`} text={block.thinking} />;
               case "toolCall":
@@ -50,6 +72,7 @@ function ThreadRow({ item }: { item: ThreadItem }) {
           })}
         </div>
       );
+    }
     default: {
       const _exhaustive: never = item;
       return _exhaustive;
@@ -71,9 +94,18 @@ export function App() {
     { type: "auth_prompt" }
   > | null>(null);
   const [authDraft, setAuthDraft] = useState("");
+  const [streaming, setStreaming] = useState(false);
   const logRef = useRef<HTMLElement>(null);
+  const followRef = useRef(true);
   const visible = filterThread(items, query);
   const title = items.find((item) => item.kind === "user")?.text ?? "New thread";
+  let lastVisible = -1;
+  for (let index = visible.length - 1; index >= 0; index--) {
+    if (visible[index]?.kind === "assistant") {
+      lastVisible = index;
+      break;
+    }
+  }
 
   function applyStatus(next: HostStatus): void {
     setStatus(next);
@@ -111,6 +143,14 @@ export function App() {
         setAuthDraft("");
       }
       if (event.type === "error") hideAuth();
+      if (event.type === "agent_start") setStreaming(true);
+      if (
+        event.type === "agent_settled" ||
+        event.type === "agent_end" ||
+        event.type === "error"
+      ) {
+        setStreaming(false);
+      }
       setItems((current) => foldThread(current, event));
     });
     void window.host.status().then(applyStatus);
@@ -119,8 +159,8 @@ export function App() {
 
   useEffect(() => {
     const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [visible]);
+    if (log && followRef.current) log.scrollTop = log.scrollHeight;
+  }, [visible, streaming]);
 
   return (
     <div className="relative flex min-h-screen">
@@ -131,10 +171,25 @@ export function App() {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Search query={query} onQuery={setQuery} />
-        <main id="log" ref={logRef} aria-live="polite" className="min-h-0 flex-1 overflow-auto p-5">
+        <main
+          id="log"
+          ref={logRef}
+          aria-live="polite"
+          className="min-h-0 flex-1 overflow-auto p-5"
+          onScroll={(event) => {
+            const log = event.currentTarget;
+            followRef.current =
+              log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+          }}
+        >
           {visible.map((item, index) => (
-            <ThreadRow key={`${item.kind}-${index}`} item={item} />
+            <ThreadRow
+              key={`${item.kind}-${index}`}
+              item={item}
+              live={streaming && index === lastVisible}
+            />
           ))}
+          {streaming && waitingForAssistant(items) ? <LoadingState /> : null}
         </main>
         <PromptBar
           status={status}

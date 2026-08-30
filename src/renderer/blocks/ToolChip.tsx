@@ -1,9 +1,14 @@
 export function ToolChip({ name, ok }: { name: string; ok?: boolean }) {
   const label =
-    ok === undefined ? `tool ${name}` : `tool ${name} ${ok ? "ok" : "failed"}`;
+    ok === undefined ? `${name}…` : `${name} ${ok ? "ok" : "failed"}`;
   return (
-    <p data-role="tool" className="mb-3 whitespace-pre-wrap text-[13px] text-muted">
-      {label}
+    <p className="mb-3">
+      <span
+        data-role="tool"
+        className="inline-flex rounded-full border border-line bg-panel px-2.5 py-1 text-[13px] text-muted"
+      >
+        {label}
+      </span>
     </p>
   );
 }

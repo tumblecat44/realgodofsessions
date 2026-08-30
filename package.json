@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "check": "node --experimental-strip-types src/main/agent-events.check.ts && node --experimental-strip-types src/main/app-settings.check.ts && node --experimental-strip-types src/shared/thread.check.ts && node --experimental-strip-types src/renderer/chrome/search.check.ts",
+    "check": "node --experimental-strip-types src/main/agent-events.check.ts && node --experimental-strip-types src/main/app-settings.check.ts && node --experimental-strip-types src/shared/thread.check.ts && node --experimental-strip-types src/renderer/chrome/search.check.ts && node --experimental-strip-types src/renderer/blocks/fences.check.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
